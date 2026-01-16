@@ -4,19 +4,20 @@ from datetime import datetime
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# Load environment variables
+# ---------------- LOAD ENV ----------------
 load_dotenv()
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="SafeHire AI", layout="centered")
-st.title("🛡️ SafeHire AI – Internship Scam Detector")
-st.write("Paste an internship or job message below to check if it is a scam.")
+
+st.markdown("## 🛡️ SafeHire AI")
+st.caption("Check internship or job messages for scam risk in seconds.")
 
 # ---------------- API KEY ----------------
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
-    st.error("❌ GEMINI_API_KEY is not set in Streamlit Secrets.")
+    st.error("❌ GEMINI_API_KEY is not set. Please configure Streamlit secrets.")
     st.stop()
 
 genai.configure(api_key=API_KEY)
@@ -29,37 +30,32 @@ You are SafeHire AI, an AI system for detecting internship and job scams.
 
 Today's date is {today}.
 
-Your task is to analyze job or internship messages using real-world hiring practices and web-based reasoning.
+Your task is to analyze job or internship messages using real-world hiring practices.
 
 Rules:
-- Future joining dates are normal.
-- Do NOT flag something as suspicious just because it is in the future.
+- Future dates alone are NOT suspicious.
 - Hiring timelines:
-  • 0–18 months ahead → normal
-  • 18–24 months ahead → acceptable
-  • More than 24 months ahead → suspicious
-- Always evaluate email domains, company reputation, payment requests, and hiring process.
-- Use logical, real-world recruiting behavior in every decision.
+  • 0–18 months → normal
+  • 18–24 months → acceptable
+  • >24 months → suspicious
+- Evaluate domains, payment requests, company presence, urgency, and process realism.
 
-You MUST output the result in the following EXACT format and NEVER change it:
+You MUST respond in the EXACT format below:
 
 Risk Score: <number from 0 to 100>
 Verdict: <Legitimate | Suspicious | Scam>
 Evidence:
-- <bullet point>
-- <bullet point>
+- <point>
+- <point>
 Scam Signals:
-- <bullet point>
-- <bullet point>
+- <point>
+- <point>
 Advice:
-- <bullet point>
-- <bullet point>
+- <point>
+- <point>
 
-Do NOT omit any section.
-Always include a numeric Risk Score.
-Do not add extra text outside this format.
+Do not add or remove sections.
 """
-
 
 # ---------------- MODEL ----------------
 try:
@@ -68,20 +64,75 @@ try:
         system_instruction=SYSTEM_PROMPT
     )
 except Exception as e:
-    st.error(f"❌ Gemini model failed to load: {e}")
+    st.error(f"❌ Failed to load Gemini model: {e}")
     st.stop()
 
-# ---------------- UI ----------------
-user_input = st.text_area("Paste internship or job message here:")
+# ---------------- INPUT ----------------
+user_input = st.text_area(
+    "📋 Paste internship or job message here",
+    height=180,
+    placeholder="Paste the full message or email content..."
+)
 
-if st.button("Analyze"):
-    if user_input.strip() == "":
-        st.warning("Please paste a message first.")
+# ---------------- HELPERS ----------------
+def extract_section(text, header):
+    if header not in text:
+        return ""
+    return text.split(header, 1)[1].split("\n", 1)[1].strip()
+
+def extract_risk_score(text):
+    for line in text.splitlines():
+        if line.startswith("Risk Score"):
+            return int("".join(filter(str.isdigit, line)))
+    return 0
+
+def bullet_points(text, limit=3):
+    return [line.replace("-", "").strip() for line in text.splitlines() if line.strip()][:limit]
+
+# ---------------- ANALYZE ----------------
+if st.button("🔍 Check Message"):
+    if not user_input.strip():
+        st.warning("Please paste a message to analyze.")
     else:
-        with st.spinner("Analyzing with SafeHire AI..."):
+        with st.spinner("Analyzing message..."):
             try:
                 response = model.generate_content(user_input)
-                st.markdown("### 🔍 Analysis Result")
-                st.write(response.text)
+                result = response.text
+
+                risk = extract_risk_score(result)
+                verdict = extract_section(result, "Verdict:")
+                evidence = extract_section(result, "Evidence:")
+                signals = extract_section(result, "Scam Signals:")
+                advice = extract_section(result, "Advice:")
+
+                st.divider()
+
+                # ---------------- COLOR CARD ----------------
+                if risk >= 70:
+                    st.error("🚨 **UNSAFE — SCAM DETECTED**")
+                elif risk >= 40:
+                    st.warning("⚠️ **CAUTION — SUSPICIOUS**")
+                else:
+                    st.success("✅ **SAFE — LIKELY LEGITIMATE**")
+
+                st.markdown(f"### Risk Score: **{risk} / 100**")
+                st.progress(risk / 100)
+
+                # ---------------- WHY ----------------
+                st.markdown("### 🤔 Why this result?")
+                for point in bullet_points(signals):
+                    st.markdown(f"• {point}")
+
+                # ---------------- ACTION ----------------
+                st.markdown("### ✅ What should you do?")
+                for step in bullet_points(advice):
+                    st.markdown(f"• {step}")
+
+                # ---------------- DETAILS ----------------
+                with st.expander("🔍 View detailed analysis"):
+                    st.markdown("**Evidence**")
+                    for item in bullet_points(evidence, limit=5):
+                        st.markdown(f"• {item}")
+
             except Exception as e:
                 st.error(f"❌ Analysis failed: {e}")
