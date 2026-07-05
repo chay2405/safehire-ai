@@ -329,5 +329,3 @@ Users should always verify internship and job offers through official company we
 - LinkedIn: https://linkedin.com/in/chaitanya-peddiboyina
 
 ---
-
-## ⭐ If you found this project useful, consider giving it a star!
